@@ -39,32 +39,36 @@ public class UnionGenerator : ISourceGenerator
                 var constraint = trees.StructTree.DescendantNodes().OfType<TypeParameterConstraintClauseSyntax>();
                 var genericConstraints = constraint.ToImmutableDictionary(x => x.Name.ToString(), x => x.ToString());
 
+                var genericParameters = trees.StructTree.DescendantNodes().OfType<TypeParameterSyntax>()
+                    .Where(x => Extensions.TraverseBack<MethodDeclarationSyntax>(x) is null)
+                    .Select(x => x.Identifier.ToString())
+                    .Distinct()
+                    .ToImmutableArray();
+
+                var fields = trees.FieldsTree.Select(f => new UnionTypeDescriptor(
+                    f.Declaration.Variables.Single().Identifier.ToString(),
+                    Extensions.GetFieldType(f, context.Compilation) ?? string.Empty,
+                    f.AttributeLists.SelectMany(a => a.Attributes)
+                        .Where(a => a.ToString().StartsWith("UnionPart"))
+                        .SelectMany(a =>
+                            a.ArgumentList?.Arguments.Select(arg => Extensions.ParseArgumentSyntax(arg.ToString()))
+                            ?? []
+                        )
+                        .ToImmutableDictionary(x => x.Argument, x => x.Value),
+                    Extensions.IsStruct(f, context.Compilation) && f.Declaration.Type is NullableTypeSyntax
+                )).ToImmutableArray();
+
                 return new UnionDescriptor(
                     trees.NamespaceTree?.Name.ToString(),
                     trees.StructTree.Identifier.ToString(),
-                    trees.StructTree.DescendantNodes().OfType<TypeParameterSyntax>()
-                        .Where(x => Extensions.TraverseBack<MethodDeclarationSyntax>(x) is null)
-                        .Select(x => x.Identifier.ToString())
-                        .Distinct()
-                        .ToImmutableArray(),
+                    genericParameters,
                     trees.StructTree.AttributeLists.SelectMany(x => x.Attributes)
                         .Where(a => a.ToString().StartsWith("Union"))
                         .SelectMany(a =>
                             a.ArgumentList?.Arguments.SelectMany(arg => Extensions.ParseUnvaluedStates(arg.ToString()))
                             ?? []).ToImmutableArray(),
                     trees.Usings ?? ImmutableArray<string>.Empty,
-                    trees.FieldsTree.Select(f => new UnionTypeDescriptor(
-                        f.Declaration.Variables.Single().Identifier.ToString(),
-                        f.DescendantNodes().OfType<TypeSyntax>().Last().ToString(),
-                        f.AttributeLists.SelectMany(a => a.Attributes)
-                            .Where(a => a.ToString().StartsWith("UnionPart"))
-                            .SelectMany(a =>
-                                a.ArgumentList?.Arguments.Select(arg => Extensions.ParseArgumentSyntax(arg.ToString()))
-                                ?? []
-                            )
-                            .ToImmutableDictionary(x => x.Argument, x => x.Value),
-                        Extensions.IsStruct(f, context.Compilation) && f.Declaration.Type is NullableTypeSyntax
-                    )).ToImmutableArray(),
+                    fields,
                     genericConstraints
                 );
             })
@@ -87,10 +91,29 @@ file static class Extensions
     public static bool IsStruct(FieldDeclarationSyntax f, Compilation compilation)
     {
         var semantic = compilation.GetSemanticModel(f.SyntaxTree);
-        return semantic.GetDeclaredSymbol(f.Declaration.Variables.Last()) is IFieldSymbol
+        var isValueType = semantic.GetDeclaredSymbol(f.Declaration.Variables.Last()) is IFieldSymbol
         {
             Type.IsValueType: true,
         };
+
+        return isValueType;
+    }
+
+    public static string? GetFieldType(FieldDeclarationSyntax f, Compilation compilation)
+    {
+        var semantic = compilation.GetSemanticModel(f.SyntaxTree);
+        var typeSemantic = semantic.GetDeclaredSymbol(f.Declaration.Variables.Last()) as IFieldSymbol;
+        var fullType = typeSemantic?.Type.ToString() ?? string.Empty;
+
+        var fullTypeSpan = fullType.ToCharArray().AsSpan();
+        var typeSpan = fullTypeSpan.LastIndexOf('.') is var x && x > 0
+            ? fullTypeSpan[(x + 1)..]
+            : fullTypeSpan;
+
+        typeSpan = typeSpan[^1] == '?' ? typeSpan[..^1] : typeSpan;
+        var type = typeSpan.ToString();
+
+        return type;
     }
 
     public static T? TraverseBack<T>(SyntaxNode syntaxTree) where T : SyntaxNode
