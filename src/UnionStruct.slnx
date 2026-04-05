@@ -1,12 +1,8 @@
 ﻿<Solution>
-  <Folder Name="/example/" />
-  <Folder Name="/example/authapi/">
-    <Project Path="examples\authapi\ExampleAuth.Api\ExampleAuth.Api.csproj" Type="Classic C#" />
-  </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests\UnionStruct.ConsoleTest\UnionStruct.ConsoleTest.csproj" Type="Classic C#" />
+    <Project Path="tests\UnionStruct.ConsoleTest\UnionStruct.ConsoleTest.csproj" Type="C#" />
   </Folder>
-  <Folder Name="lib">
-    <Project Path="lib\UnionStruct.Core\UnionStruct.Core.csproj" Type="Classic C#" />
+  <Folder Name="/lib/">
+    <Project Path="lib\UnionStruct.Core\UnionStruct.Core.csproj" Type="C#" />
   </Folder>
 </Solution>

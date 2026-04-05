@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using System.Text;
 using UnionStruct.Unions;
 
@@ -8,8 +9,12 @@ public static class ExtensionsGenerator
 {
     public static string Generate(UnionContext unionContext)
     {
+        var rnd = new Random();
+        var mangle = new string(Enumerable.Range(0, 12).Select(_ => (char)('A' + rnd.Next(26))).ToArray());
+
         return $$"""
-                 public static class {{unionContext.Descriptor.StructName}}GeneratedExtensions
+                 {{GeneratedCodeAttributeLine.Code}}
+                 public static class {{unionContext.Descriptor.StructName}}GeneratedExtensions{{mangle}}
                  {
                     {{GenerateAsyncMapExtensions(unionContext)}}
                     
@@ -24,71 +29,69 @@ public static class ExtensionsGenerator
     {
         var allConstraints = string.Join('\n', context.Descriptor.GenericConstraints.Values);
 
-        var unvaluedWhenMethods = context.UnvaluedEnums.Select(
-            state =>
-                $$"""
-                    public static Task<{{context.FullUnionDeclaration}}> When{{state}}{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Action body) 
-                    {{allConstraints}}
-                    {
+        var unvaluedWhenMethods = context.UnvaluedEnums.Select(state =>
+            $$"""
+                public static Task<{{context.FullUnionDeclaration}}> When{{state}}{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Action body) 
+                {{allConstraints}}
+                {
+                    return src.ContinueWith(
+                        t => t switch 
+                        {
+                            { Exception: null } => t.Result.When{{state}}(body),
+                            { Exception: not null } => throw new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception),
+                            _ => throw new InvalidOperationException("Error when observing state {{state}}")
+                        }
+                    );
+                }
+                
+                public static Task<{{context.FullUnionDeclaration}}> When{{state}}Async{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Func<Task> body) 
+                {{allConstraints}}
+                {
+                    return src.ContinueWith(
+                        t => t switch 
+                        {
+                            { Exception: null } => t.Result.When{{state}}Async(body),
+                            { Exception: not null } => Task.FromException<{{context.FullUnionDeclaration}}>(new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception)),
+                            _ => Task.FromException<{{context.FullUnionDeclaration}}>(new InvalidOperationException("Error when observing state {{state}}"))
+                        }
+                    ).Unwrap();
+                }
+              """
+        );
+
+        var stateWhenMethods = context.Descriptor.Fields.Select(descriptor =>
+        {
+            var state = context.FieldNameToEnumMap[descriptor.Name];
+
+            return $$"""
+                       public static Task<{{context.FullUnionDeclaration}}> When{{state}}{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Action<{{descriptor.Type}}> body) 
+                       {{allConstraints}}
+                       {
+                           return src.ContinueWith(
+                               t => t switch 
+                               {
+                                   { Exception: null } => t.Result.When{{state}}(body),
+                                   { Exception: not null } => throw new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception),
+                                   _ => throw new InvalidOperationException("Error when observing state {{state}}")
+                               }
+                           );
+                       }
+                       
+
+                     public static Task<{{context.FullUnionDeclaration}}> When{{state}}Async{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Func<{{descriptor.Type}}, Task> body) 
+                     {{allConstraints}}
+                     {
                         return src.ContinueWith(
-                            t => t switch 
-                            {
-                                { Exception: null } => t.Result.When{{state}}(body),
-                                { Exception: not null } => throw new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception),
-                                _ => throw new InvalidOperationException("Error when observing state {{state}}")
-                            }
-                        );
-                    }
-                    
-                    public static Task<{{context.FullUnionDeclaration}}> When{{state}}Async{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Func<Task> body) 
-                    {{allConstraints}}
-                    {
-                        return src.ContinueWith(
-                            t => t switch 
-                            {
+                             t => t switch 
+                             {
                                 { Exception: null } => t.Result.When{{state}}Async(body),
                                 { Exception: not null } => Task.FromException<{{context.FullUnionDeclaration}}>(new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception)),
                                 _ => Task.FromException<{{context.FullUnionDeclaration}}>(new InvalidOperationException("Error when observing state {{state}}"))
-                            }
+                             }
                         ).Unwrap();
-                    }
-                  """
-        );
-
-        var stateWhenMethods = context.Descriptor.Fields.Select(
-            descriptor =>
-            {
-                var state = context.FieldNameToEnumMap[descriptor.Name];
-
-                return $$"""
-                           public static Task<{{context.FullUnionDeclaration}}> When{{state}}{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Action<{{descriptor.Type}}> body) 
-                           {{allConstraints}}
-                           {
-                               return src.ContinueWith(
-                                   t => t switch 
-                                   {
-                                       { Exception: null } => t.Result.When{{state}}(body),
-                                       { Exception: not null } => throw new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception),
-                                       _ => throw new InvalidOperationException("Error when observing state {{state}}")
-                                   }
-                               );
-                           }
-                           
-                         
-                         public static Task<{{context.FullUnionDeclaration}}> When{{state}}Async{{context.GenericDeclaration}}(this Task<{{context.FullUnionDeclaration}}> src, Func<{{descriptor.Type}}, Task> body) 
-                         {{allConstraints}}
-                         {
-                            return src.ContinueWith(
-                                 t => t switch 
-                                 {
-                                    { Exception: null } => t.Result.When{{state}}Async(body),
-                                    { Exception: not null } => Task.FromException<{{context.FullUnionDeclaration}}>(new InvalidOperationException("Error when observing state {{state}}", innerException: t.Exception)),
-                                    _ => Task.FromException<{{context.FullUnionDeclaration}}>(new InvalidOperationException("Error when observing state {{state}}"))
-                                 }
-                            ).Unwrap();
-                         }
-                         """;
-            });
+                     }
+                     """;
+        });
 
         return string.Join("\n\n", unvaluedWhenMethods.Concat(stateWhenMethods));
     }
@@ -154,7 +157,7 @@ public static class ExtensionsGenerator
         var genericParams = context.Descriptor.GenericParameters;
         var fullStructName = context.FullUnionDeclaration;
         var initialGenerics = string.Join(",", context.Descriptor.GenericParameters);
-        initialGenerics = initialGenerics == string.Empty ? string.Empty : $"{initialGenerics}, ";
+        initialGenerics = initialGenerics == string.Empty ? string.Empty : initialGenerics;
 
         var allConstraints = string.Join('\n', context.Descriptor.GenericConstraints.Values);
 
@@ -184,7 +187,7 @@ public static class ExtensionsGenerator
             var funcType = isGeneric ? "TOut" : descriptor.Type;
             var genericType = isGeneric ? "TOut" : string.Empty;
 
-            var parameters = $"<{initialGenerics}{genericType}>";
+            var parameters = isGeneric ? $"<{initialGenerics}, {genericType}>" : $"<{initialGenerics}>";
             parameters = parameters == "<>" ? string.Empty : parameters;
 
             sb.AppendLine(

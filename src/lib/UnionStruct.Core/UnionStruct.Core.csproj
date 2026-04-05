@@ -15,7 +15,7 @@
         <RootNamespace>UnionStruct</RootNamespace>
         <PackageId>UnionStruct</PackageId>
         
-        <Version>0.0.5</Version>
+        <Version>0.0.6</Version>
         <Authors>Siarhei Anisimau</Authors>
 
         <RepositoryUrl>https://github.com/UnionStruct/UnionStruct.git</RepositoryUrl>

@@ -30,7 +30,7 @@ public static class UnionCodeGenerator
         ]));
 
         const string nullableDeclaration = "#nullable enable";
-        const string layoutStructDeclaration = "[StructLayout(LayoutKind.Auto)]";
+        const string structAttributes = $"[StructLayout(LayoutKind.Auto)]\n{GeneratedCodeAttributeLine.Code}";
 
         var extensionsCode = ExtensionsGenerator.Generate(unionContext);
 
@@ -38,7 +38,7 @@ public static class UnionCodeGenerator
                                  + nullableDeclaration + "\n\n"
                                  + namespaceDeclaration + "\n\n"
                                  + generatedEnum.Body + "\n\n"
-                                 + layoutStructDeclaration + "\n"
+                                 + structAttributes + "\n"
                                  + structDeclaration + "\n"
                                  + "{" + "\n"
                                  + generatedInits.Body + "\n"
